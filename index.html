@@ -397,9 +397,11 @@
     .segmented label {
       position: relative;
       display: flex; align-items: center; justify-content: center;
-      height: 38px;
-      font-size: 9.5px;
-      letter-spacing: 0.18em;
+      text-align: center;
+      height: 36px;
+      padding: 0 4px;
+      font-size: 8px;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       font-weight: 500;
       cursor: pointer;
@@ -446,6 +448,35 @@
     .rating--input button.is-hot .whisk { color: var(--whisk-hot); }
 
     .rating--display { --whisk-size: 16px; gap: 3px; }
+    .rating .rating__num {
+      font-family: var(--font-serif);
+      font-size: 0.875rem;
+      margin-left: 6px;
+      color: var(--fg);
+      font-feature-settings: "tnum";
+    }
+
+    /* Rating input row — whisks + numeric field */
+    .rating-row {
+      display: flex; align-items: center; gap: 14px;
+      flex-wrap: wrap;
+    }
+    .rating-number {
+      width: 88px;
+      font-family: var(--font-serif);
+      font-size: 1.375rem;
+      text-align: center;
+      border: 1px solid var(--rule-strong);
+      background: transparent;
+      padding: 8px 6px;
+      color: var(--fg);
+      -webkit-appearance: none;
+      appearance: none;
+      font-feature-settings: "tnum";
+    }
+    .rating-number::-webkit-outer-spin-button,
+    .rating-number::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .rating-number:focus { outline: none; border-color: var(--fg); }
 
     /* ---------- Entries list ---------- */
     .entries {
@@ -827,7 +858,7 @@
           <div class="field">
             <span class="field__label overline">Grade</span>
             <div class="segmented" role="radiogroup" aria-label="Grade">
-              <label><input type="radio" name="grade" value="ceremonial"/><span>Cere.</span></label>
+              <label><input type="radio" name="grade" value="ceremonial"/><span>Ceremonial</span></label>
               <label><input type="radio" name="grade" value="premium"/><span>Premium</span></label>
               <label><input type="radio" name="grade" value="culinary"/><span>Culinary</span></label>
             </div>
@@ -835,7 +866,10 @@
 
           <div class="field field--span">
             <span class="field__label overline">Rating</span>
-            <div id="rating-input" class="rating rating--input" role="radiogroup" aria-label="Rating out of five whisks"></div>
+            <div class="rating-row">
+              <div id="rating-input" class="rating rating--input" role="radiogroup" aria-label="Rating out of five whisks"></div>
+              <input id="rating-number" class="rating-number" type="number" inputmode="decimal" min="0" max="5" step="0.01" placeholder="0.00" aria-label="Rating value (0 to 5, up to 2 decimals)" />
+            </div>
             <span id="rating-caption" class="field__caption"></span>
           </div>
 
@@ -1034,18 +1068,31 @@
     };
 
     /* ---------- Rating widget ---------- */
+    // Clamp to 0–5 and round to 2 decimal places.
+    const cleanRating = (val) => {
+      let n = Number(val);
+      if (!Number.isFinite(n)) n = 0;
+      n = Math.max(0, Math.min(5, n));
+      return Math.round(n * 100) / 100;
+    };
+    const formatRating = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2);
+
     const renderRatingDisplay = (value) => {
-      const v = Math.max(0, Math.min(5, Number(value) || 0));
-      let html = `<div class="rating rating--display" role="img" aria-label="${v} out of 5 whisks">`;
+      const v = cleanRating(value);
+      const lit = Math.round(v); // whisks are discrete — round to nearest
+      let html = `<div class="rating rating--display" role="img" aria-label="${formatRating(v)} out of 5 whisks">`;
       for (let i = 1; i <= 5; i++) {
-        html += `<span class="${i <= v ? "is-on" : ""}">${WHISK_SVG}</span>`;
+        html += `<span class="${i <= lit ? "is-on" : ""}">${WHISK_SVG}</span>`;
       }
+      if (v > 0) html += `<span class="rating__num">${formatRating(v)}</span>`;
       html += `</div>`;
       return html;
     };
 
     const mountRatingInput = (container, initial = 0) => {
-      container.dataset.value = String(initial);
+      const numEl = qs("#rating-number");
+      const caption = qs("#rating-caption");
+
       container.innerHTML = "";
       for (let i = 1; i <= 5; i++) {
         const btn = document.createElement("button");
@@ -1056,15 +1103,35 @@
         btn.innerHTML = WHISK_SVG;
         container.appendChild(btn);
       }
-      const caption = qs("#rating-caption");
-      const labels = { 0: "No rating yet.", 1: "One whisk — bitter, unloved.", 2: "Two whisks — ordinary.", 3: "Three whisks — pleasant.", 4: "Four whisks — excellent.", 5: "Five whisks — transcendent." };
-      const render = (val) => {
+
+      const intLabels = {
+        0: "No rating yet.",
+        1: "One whisk — bitter, unloved.",
+        2: "Two whisks — ordinary.",
+        3: "Three whisks — pleasant.",
+        4: "Four whisks — excellent.",
+        5: "Five whisks — transcendent.",
+      };
+
+      const render = (v) => {
+        const lit = Math.round(v);
         qsa("button", container).forEach(b => {
-          const v = Number(b.dataset.value);
-          b.classList.toggle("is-on", v <= val);
+          const i = Number(b.dataset.value);
+          b.classList.toggle("is-on", i <= lit);
           b.classList.remove("is-hot");
         });
-        if (caption) caption.textContent = labels[val] ?? "";
+        if (caption) {
+          if (v === 0) caption.textContent = intLabels[0];
+          else if (Number.isInteger(v) && intLabels[v]) caption.textContent = intLabels[v];
+          else caption.textContent = `${formatRating(v)} / 5 whisks. Tap whisks for whole numbers, or type a decimal.`;
+        }
+      };
+
+      const setVal = (raw, { fromInput = false } = {}) => {
+        const v = cleanRating(raw);
+        container.dataset.value = String(v);
+        if (numEl && !fromInput) numEl.value = v === 0 ? "" : formatRating(v);
+        render(v);
       };
       const getVal = () => Number(container.dataset.value || 0);
 
@@ -1072,21 +1139,32 @@
         const b = e.target.closest("button"); if (!b) return;
         const v = Number(b.dataset.value);
         const newVal = (getVal() === 1 && v === 1) ? 0 : v;
-        container.dataset.value = String(newVal);
-        render(newVal);
+        setVal(newVal);
       });
       container.addEventListener("keydown", (e) => {
         if (!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," "].includes(e.key)) return;
         e.preventDefault();
+        const step = e.shiftKey ? 0.25 : 1;
         let v = getVal();
-        if (e.key === "ArrowRight" || e.key === "ArrowUp") v = Math.min(5, v + 1);
-        if (e.key === "ArrowLeft"  || e.key === "ArrowDown") v = Math.max(0, v - 1);
-        container.dataset.value = String(v);
-        render(v);
+        if (e.key === "ArrowRight" || e.key === "ArrowUp")   v = Math.min(5, v + step);
+        if (e.key === "ArrowLeft"  || e.key === "ArrowDown") v = Math.max(0, v - step);
+        setVal(v);
       });
 
-      render(initial);
-      return { get: getVal, set: (v) => { container.dataset.value = String(v); render(v); } };
+      if (numEl) {
+        numEl.addEventListener("input", () => {
+          // Allow empty (treat as 0); otherwise sync clamped value back to whisks.
+          if (numEl.value === "") { setVal(0, { fromInput: true }); return; }
+          setVal(numEl.value, { fromInput: true });
+        });
+        numEl.addEventListener("blur", () => {
+          const v = cleanRating(numEl.value);
+          numEl.value = v === 0 ? "" : formatRating(v);
+        });
+      }
+
+      setVal(initial);
+      return { get: getVal, set: setVal };
     };
 
     /* ---------- Router ---------- */
@@ -1276,7 +1354,7 @@
           id, company, name,
           region:       qs("#f-region").value.trim(),
           grade,
-          rating:       ratingCtrl ? ratingCtrl.get() : 0,
+          rating:       cleanRating(ratingCtrl ? ratingCtrl.get() : 0),
           tastingNotes: qs("#f-tasting").value.trim(),
           notes:        qs("#f-notes").value.trim(),
           createdAt:    existing?.createdAt || now,
@@ -1347,7 +1425,7 @@
               name:         x.name || "",
               region:       x.region || "",
               grade:        GRADES[x.grade] ? x.grade : "",
-              rating:       Math.max(0, Math.min(5, Number(x.rating) || 0)),
+              rating:       cleanRating(x.rating),
               tastingNotes: x.tastingNotes || x.tasting || "",
               notes:        x.notes || "",
               createdAt:    x.createdAt || new Date().toISOString(),
