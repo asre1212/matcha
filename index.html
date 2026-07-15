@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 
   <!-- ============ PWA / iOS meta ============ -->
-  <meta name="app-version" content="1.0.2" />
+  <meta name="app-version" content="1.1.0" />
   <meta name="theme-color" content="#F9F8F6" />
   <meta name="color-scheme" content="light" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -27,6 +27,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet" />
 
   <title>Matcha Journal</title>
+  <meta name="description" content="A private matcha tasting journal. Log every bowl — company, region, grade, rating, tasting notes." />
+  <meta property="og:title" content="Matcha Journal" />
+  <meta property="og:description" content="A private matcha tasting journal. Log every bowl — company, region, grade, rating, tasting notes." />
+  <meta property="og:type" content="website" />
 
   <style>
     /* =====================================================
@@ -536,6 +540,17 @@
       border-top: 1px solid var(--fg);
       cursor: pointer;
       transition: padding-left var(--t-fast) var(--ease);
+      display: flex;
+      gap: 0.875rem;
+      align-items: center;
+    }
+    .entry-card__body { flex: 1; min-width: 0; }
+    .entry-card__media { flex: none; }
+    .entry-card__media img {
+      width: 76px; height: 76px;
+      object-fit: cover;
+      border: 1px solid var(--rule-strong);
+      background: var(--bg-muted);
     }
     .entry-card::before {
       content: "";
@@ -618,6 +633,16 @@
       color: var(--fg-muted);
       margin: 0 0 1.25rem;
     }
+    .detail__photo {
+      margin: 0 0 1.25rem;
+    }
+    .detail__photo img {
+      width: 100%;
+      max-height: 340px;
+      object-fit: cover;
+      border: 1px solid var(--rule-strong);
+      background: var(--bg-muted);
+    }
     .detail__specs {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -666,6 +691,20 @@
       display: flex; gap: 0.625rem; margin-top: 1.5rem; padding-top: 1.125rem;
       border-top: 1px solid var(--rule);
       flex-wrap: wrap;
+    }
+
+    /* ---------- Photo field ---------- */
+    .photo-field {
+      display: flex; align-items: flex-start; gap: 0.875rem; flex-wrap: wrap;
+    }
+    .photo-field__preview {
+      width: 96px; height: 96px;
+      object-fit: cover;
+      border: 1px solid var(--rule-strong);
+      background: var(--bg-muted);
+    }
+    .photo-field__actions {
+      display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
     }
 
     /* ---------- Form ---------- */
@@ -841,18 +880,23 @@
 
       <template id="tmpl-entry-card">
         <article class="entry-card" tabindex="0">
-          <div class="entry-card__top">
-            <span class="overline entry-card__company"></span>
-            <span class="overline entry-card__date"></span>
+          <div class="entry-card__body">
+            <div class="entry-card__top">
+              <span class="overline entry-card__company"></span>
+              <span class="overline entry-card__date"></span>
+            </div>
+            <h2 class="entry-card__name"></h2>
+            <div class="entry-card__meta">
+              <span class="entry-card__region"></span>
+              <span class="entry-card__dot">&middot;</span>
+              <span class="entry-card__grade"></span>
+            </div>
+            <div class="entry-card__rating" aria-label="Rating"></div>
+            <p class="entry-card__notes"></p>
           </div>
-          <h2 class="entry-card__name"></h2>
-          <div class="entry-card__meta">
-            <span class="entry-card__region"></span>
-            <span class="entry-card__dot">&middot;</span>
-            <span class="entry-card__grade"></span>
+          <div class="entry-card__media" hidden>
+            <img alt="" loading="lazy" />
           </div>
-          <div class="entry-card__rating" aria-label="Rating"></div>
-          <p class="entry-card__notes"></p>
         </article>
       </template>
 
@@ -909,6 +953,21 @@
               <label><input type="radio" name="grade" value="premium"/><span>Premium</span></label>
               <label><input type="radio" name="grade" value="culinary"/><span>Culinary</span></label>
             </div>
+          </div>
+
+          <div class="field field--span">
+            <span class="field__label overline">Photo</span>
+            <div class="photo-field">
+              <img id="photo-preview" class="photo-field__preview" alt="Entry photo preview" hidden />
+              <div class="photo-field__actions">
+                <label class="btn btn--secondary">
+                  Add Photo
+                  <input type="file" id="f-photo" accept="image/*" hidden />
+                </label>
+                <button type="button" class="btn btn--ghost" id="photo-remove-btn" hidden>Remove</button>
+              </div>
+            </div>
+            <span class="field__caption" id="photo-caption">The bowl, the tin, the label&hellip;</span>
           </div>
 
           <div class="field field--span">
@@ -1053,7 +1112,7 @@
   (() => {
     "use strict";
 
-    const APP_VERSION = "1.0.2";    /* MUST match <meta name="app-version"> above */
+    const APP_VERSION = "1.1.0";    /* MUST match <meta name="app-version"> above */
     const STORAGE_KEY = "matcha:journal:v1";
     const VIEWS = ["list", "detail", "form", "settings", "notebook"];
     const GRADES = { ceremonial: "Ceremonial", premium: "Premium", culinary: "Culinary" };
@@ -1080,14 +1139,21 @@
         try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : []; }
         catch (e) { console.error(e); return []; }
       },
-      save(entries) { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); },
+      save(entries) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); return true; }
+        catch (err) {
+          console.error(err);
+          toast("Storage is full — could not save. Try a smaller photo or export & prune.", { err: true, ms: 4200 });
+          return false;
+        }
+      },
       all() { return this.load(); },
       byId(id) { return this.load().find(e => e.id === id) || null; },
       upsert(entry) {
         const all = this.load();
         const i = all.findIndex(e => e.id === entry.id);
         if (i >= 0) all[i] = entry; else all.unshift(entry);
-        this.save(all);
+        return this.save(all);
       },
       remove(id) { this.save(this.load().filter(e => e.id !== id)); },
       wipe() { localStorage.removeItem(STORAGE_KEY); },
@@ -1240,6 +1306,41 @@
       return { get: getVal, set: setVal };
     };
 
+    /* ---------- Photo handling ----------
+       Photos are stored inline as JPEG data URLs so they travel
+       with the JSON backup. Downscale + recompress until the
+       result fits comfortably inside localStorage. */
+    const PHOTO_BUDGET = 1_800_000; // ~1.8M chars of data URL per photo
+    const photoFromFile = (file) => new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        try {
+          const attempts = [[1024, 0.8], [800, 0.7], [640, 0.6], [480, 0.5]];
+          let out = "";
+          for (const [maxSide, q] of attempts) {
+            const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+            const w = Math.max(1, Math.round(img.naturalWidth * scale));
+            const h = Math.max(1, Math.round(img.naturalHeight * scale));
+            const canvas = document.createElement("canvas");
+            canvas.width = w; canvas.height = h;
+            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+            out = canvas.toDataURL("image/jpeg", q);
+            if (out.length <= PHOTO_BUDGET) break;
+          }
+          resolve(out);
+        } catch (err) { reject(err); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
+      img.src = url;
+    });
+
+    const photoSizeLabel = (dataUrl) => {
+      const kb = Math.round((dataUrl.length * 3 / 4) / 1024);
+      return kb >= 1024 ? (kb / 1024).toFixed(1) + " MB" : kb + " KB";
+    };
+
     /* ---------- Router ---------- */
     const router = {
       current: "list",
@@ -1323,6 +1424,11 @@
         qs(".entry-card__grade", node).textContent = GRADES[e.grade] || "—";
         qs(".entry-card__rating", node).innerHTML = renderRatingDisplay(e.rating);
         qs(".entry-card__notes", node).textContent = e.notes || e.tastingNotes || "";
+        if (e.photo) {
+          const media = qs(".entry-card__media", node);
+          qs("img", media).src = e.photo;
+          media.hidden = false;
+        }
         node.addEventListener("click", () => router.go("detail", e.id));
         node.addEventListener("keydown", (ev) => {
           if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); router.go("detail", e.id); }
@@ -1344,6 +1450,8 @@
         <p class="overline detail__eyebrow">${escapeHtml(GRADES[e.grade] || "—")} &middot; ${escapeHtml(fmtDateLong(e.createdAt))}</p>
         <h1 class="detail__name">${escapeHtml(e.name || "Untitled")}</h1>
         <p class="detail__company"><em>${escapeHtml(e.company || "—")}</em>${e.region ? ` &middot; ${escapeHtml(e.region)}` : ""}</p>
+
+        ${e.photo ? `<figure class="detail__photo"><img src="${escapeHtml(e.photo)}" alt="Photo of ${escapeHtml(e.name || "this matcha")}" /></figure>` : ""}
 
         <div class="detail__specs">
           <div><span class="overline spec__label">Rating</span><div class="spec__value">${renderRatingDisplay(e.rating)}</div></div>
@@ -1378,6 +1486,23 @@
     }
 
     let ratingCtrl = null;
+    let formPhoto = "";
+
+    const setFormPhoto = (dataUrl) => {
+      formPhoto = dataUrl || "";
+      const preview = qs("#photo-preview");
+      const removeBtn = qs("#photo-remove-btn");
+      const caption = qs("#photo-caption");
+      if (formPhoto) {
+        preview.src = formPhoto; preview.hidden = false;
+        removeBtn.hidden = false;
+        if (caption) caption.textContent = `Photo attached (${photoSizeLabel(formPhoto)}).`;
+      } else {
+        preview.removeAttribute("src"); preview.hidden = true;
+        removeBtn.hidden = true;
+        if (caption) caption.innerHTML = "The bowl, the tin, the label&hellip;";
+      }
+    };
 
     function renderForm(id) {
       const isEdit = !!id;
@@ -1395,6 +1520,8 @@
       qsa('input[name="grade"]').forEach(r => { r.checked = r.value === (e?.grade || ""); });
 
       ratingCtrl = mountRatingInput(qs("#rating-input"), e?.rating || 0);
+      setFormPhoto(e?.photo || "");
+      qs("#f-photo").value = "";
 
       qs("#delete-btn").hidden = !isEdit;
     }
@@ -1458,13 +1585,29 @@
           rating:       cleanRating(ratingCtrl ? ratingCtrl.get() : 0),
           tastingNotes: qs("#f-tasting").value.trim(),
           notes:        qs("#f-notes").value.trim(),
+          photo:        formPhoto || "",
           createdAt:    existing?.createdAt || now,
           updatedAt:    now,
         };
-        store.upsert(entry);
+        if (!store.upsert(entry)) return; // save failed (quota) — stay on the form
         toast(existing ? "Entry updated." : "Entry saved.");
         router.go("detail", entry.id);
       });
+
+      qs("#f-photo").addEventListener("change", async (ev) => {
+        const file = ev.target.files?.[0]; if (!file) return;
+        const caption = qs("#photo-caption");
+        if (caption) caption.textContent = "Processing photo…";
+        try {
+          setFormPhoto(await photoFromFile(file));
+        } catch (err) {
+          console.error(err);
+          setFormPhoto(formPhoto); // restore caption
+          toast("Couldn't read that image.", { err: true });
+        }
+        ev.target.value = "";
+      });
+      qs("#photo-remove-btn").addEventListener("click", () => setFormPhoto(""));
 
       qs("#cancel-btn").addEventListener("click", () => router.go("list"));
       qs("#delete-btn").addEventListener("click", () => {
@@ -1653,7 +1796,7 @@
     };
 
     const entriesToXlsx = (entries) => {
-      const headers = ["Date", "Company", "Name", "Region", "Grade", "Rating", "Tasting Notes", "Notes"];
+      const headers = ["Date", "Company", "Name", "Region", "Grade", "Rating", "Tasting Notes", "Notes", "Photo"];
       const rows = entries.map(e => [
         (e.createdAt || "").slice(0, 10),
         e.company || "",
@@ -1663,6 +1806,7 @@
         cleanRating(e.rating),
         e.tastingNotes || "",
         e.notes || "",
+        e.photo ? "yes" : "",
       ]);
       return buildXlsx(headers, rows);
     };
@@ -1683,6 +1827,7 @@
         a.href = url; a.download = `matcha-journal-${stamp}.json`;
         document.body.appendChild(a); a.click(); a.remove();
         URL.revokeObjectURL(url);
+        try { localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString()); } catch (err) { /* non-fatal */ }
         toast(`Exported ${payload.entries.length} entries.`);
       });
 
@@ -1724,6 +1869,7 @@
               rating:       cleanRating(x.rating),
               tastingNotes: x.tastingNotes || x.tasting || "",
               notes:        x.notes || "",
+              photo:        (typeof x.photo === "string" && x.photo.startsWith("data:image/")) ? x.photo : "",
               createdAt:    x.createdAt || new Date().toISOString(),
               updatedAt:    x.updatedAt || x.createdAt || new Date().toISOString(),
             }));
@@ -1840,6 +1986,24 @@
       });
     }
 
+    /* ---------- Backup reminder ----------
+       Nudge (at most once a week) when there are entries but no
+       JSON export in the last 30 days. */
+    const LAST_EXPORT_KEY = "matcha:lastExport:v1";
+    const LAST_NUDGE_KEY  = "matcha:backupNudge:v1";
+    function maybeNudgeBackup() {
+      try {
+        if (store.all().length === 0) return;
+        const DAY = 24 * 60 * 60 * 1000;
+        const last  = Date.parse(localStorage.getItem(LAST_EXPORT_KEY) || "") || 0;
+        const nudge = Date.parse(localStorage.getItem(LAST_NUDGE_KEY)  || "") || 0;
+        const now = Date.now();
+        if (now - last < 30 * DAY || now - nudge < 7 * DAY) return;
+        localStorage.setItem(LAST_NUDGE_KEY, new Date().toISOString());
+        setTimeout(() => toast("No backup in a while — download a .json in Housekeeping.", { ms: 4200 }), 1500);
+      } catch (err) { console.warn(err); }
+    }
+
     /* ---------- Service worker registration ---------- */
     function registerSW() {
       if (!("serviceWorker" in navigator)) return;
@@ -1871,6 +2035,7 @@
       setupIO();
       setupUpdates();
       registerSW();
+      maybeNudgeBackup();
 
       const { view, param } = router.parseHash();
       router.go(view || "list", param);
