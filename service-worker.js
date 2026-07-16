@@ -13,7 +13,7 @@
    ========================================================= */
 "use strict";
 
-const SW_VERSION = "1.1.0"; /* keep in step with app-version in index.html */
+const SW_VERSION = "1.2.0"; /* keep in step with app-version in index.html */
 const CACHE_NAME = "matcha-shell-v" + SW_VERSION;
 const FONT_CACHE = "matcha-fonts-v1";
 

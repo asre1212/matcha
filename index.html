@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 
   <!-- ============ PWA / iOS meta ============ -->
-  <meta name="app-version" content="1.1.0" />
+  <meta name="app-version" content="1.2.0" />
   <meta name="theme-color" content="#F9F8F6" />
   <meta name="color-scheme" content="light" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1019,10 +1019,15 @@
             <p class="overline">01 — Transport</p>
             <h2 class="panel__title">Export your journal</h2>
           </div>
-          <p class="panel__body">Download every entry as a single JSON file (full backup) or as an Excel spreadsheet (for review).</p>
+          <p class="panel__body">
+            The journal travels as two small files: the <strong>journal</strong> (entries &amp; notebook, no photos — stays tiny)
+            and the <strong>photos</strong> package (just the pictures). Download both to move everything.
+            The spreadsheet is for review only.
+          </p>
           <div class="panel__actions">
-            <button class="btn btn--secondary" id="export-btn">Download .json</button>
-            <button class="btn btn--secondary" id="export-xlsx-btn">Download .xlsx</button>
+            <button class="btn btn--secondary" id="export-btn">Journal .json</button>
+            <button class="btn btn--secondary" id="export-photos-btn">Photos .json</button>
+            <button class="btn btn--secondary" id="export-xlsx-btn">Excel .xlsx</button>
           </div>
           <p class="panel__status overline" id="export-meta"></p>
         </section>
@@ -1032,7 +1037,10 @@
             <p class="overline">02 — Restore</p>
             <h2 class="panel__title">Import a journal</h2>
           </div>
-          <p class="panel__body">On a new iPhone? Pick your exported <code>.json</code> file.</p>
+          <p class="panel__body">
+            On a new iPhone? Pick your exported <code>.json</code> files one at a time —
+            journal first, then photos (either order works). Older single-file backups import fine too.
+          </p>
           <div class="panel__actions">
             <label class="btn btn--secondary">
               Choose File
@@ -1112,7 +1120,7 @@
   (() => {
     "use strict";
 
-    const APP_VERSION = "1.1.0";    /* MUST match <meta name="app-version"> above */
+    const APP_VERSION = "1.2.0";    /* MUST match <meta name="app-version"> above */
     const STORAGE_KEY = "matcha:journal:v1";
     const VIEWS = ["list", "detail", "form", "settings", "notebook"];
     const GRADES = { ceremonial: "Ceremonial", premium: "Premium", culinary: "Culinary" };
@@ -1555,9 +1563,11 @@
 
     function renderSettings() {
       const entries = store.all();
+      const photoCount = entries.filter(e => e.photo).length;
       qs("#export-meta").textContent = entries.length === 0
         ? "The archive is empty."
-        : `${entries.length} entr${entries.length === 1 ? "y" : "ies"} in the archive.`;
+        : `${entries.length} entr${entries.length === 1 ? "y" : "ies"} in the archive`
+          + (photoCount ? `, ${photoCount} with photos.` : ".");
       qs("#current-version").textContent = APP_VERSION;
       qs("#update-status").textContent = "";
       qs("#import-status").textContent = "";
@@ -1811,24 +1821,53 @@
       return buildXlsx(headers, rows);
     };
 
-    /* ---------- Import / Export / Wipe ---------- */
+    /* ---------- Import / Export / Wipe ----------
+       The journal moves between devices as two files so the core
+       backup stays small even when photos are attached:
+         - matcha-journal-*.json  — entries (photo stripped) + notebook
+         - matcha-photos-*.json   — { entryId: dataUrl } package
+       The import picker accepts either file (and legacy one-file
+       backups that still carry inline photos). */
+    const downloadJson = (filename, obj) => {
+      const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    };
+
     function setupIO() {
       qs("#export-btn").addEventListener("click", () => {
-        const payload = {
-          app: "matcha-journal", version: APP_VERSION,
-          exportedAt: new Date().toISOString(),
-          entries: store.all(),
-          notebook: notebookStore.load(),
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
         const stamp = new Date().toISOString().slice(0,10);
-        a.href = url; a.download = `matcha-journal-${stamp}.json`;
-        document.body.appendChild(a); a.click(); a.remove();
-        URL.revokeObjectURL(url);
+        const entries = store.all().map(({ photo, ...rest }) => ({
+          ...rest,
+          hasPhoto: !!photo, /* marker so a lean import knows a photo package is expected */
+        }));
+        downloadJson(`matcha-journal-${stamp}.json`, {
+          app: "matcha-journal", version: APP_VERSION,
+          format: "core", /* photos travel separately in matcha-photos-*.json */
+          exportedAt: new Date().toISOString(),
+          entries,
+          notebook: notebookStore.load(),
+        });
         try { localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString()); } catch (err) { /* non-fatal */ }
-        toast(`Exported ${payload.entries.length} entries.`);
+        const withPhotos = entries.filter(e => e.hasPhoto).length;
+        toast(`Exported ${entries.length} entries.` + (withPhotos ? ` Also download the photos file (${withPhotos}).` : ""), { ms: withPhotos ? 4200 : undefined });
+      });
+
+      qs("#export-photos-btn").addEventListener("click", () => {
+        const photos = {};
+        store.all().forEach(e => { if (e.photo) photos[e.id] = e.photo; });
+        const count = Object.keys(photos).length;
+        if (!count) { toast("No photos in the archive yet.", { err: true }); return; }
+        const stamp = new Date().toISOString().slice(0,10);
+        downloadJson(`matcha-photos-${stamp}.json`, {
+          app: "matcha-journal-photos", version: APP_VERSION,
+          exportedAt: new Date().toISOString(),
+          photos,
+        });
+        toast(`Exported ${count} photo${count === 1 ? "" : "s"}.`);
       });
 
       qs("#export-xlsx-btn").addEventListener("click", () => {
@@ -1857,6 +1896,28 @@
         try {
           const text = await file.text();
           const data = JSON.parse(text);
+
+          /* Photos package: attach pictures to entries already on this device. */
+          if (data && !Array.isArray(data) && !Array.isArray(data.entries) &&
+              data.photos && typeof data.photos === "object") {
+            const all = store.all();
+            let attached = 0, orphaned = 0;
+            for (const [id, dataUrl] of Object.entries(data.photos)) {
+              if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) continue;
+              const entry = all.find(en => en.id === id);
+              if (entry) { entry.photo = dataUrl; attached++; } else { orphaned++; }
+            }
+            if (!attached && !orphaned) throw new Error("No photos in that file.");
+            if (attached && !store.save(all)) { status.textContent = "Storage full — photos not saved."; status.classList.add("is-err"); e.target.value = ""; return; }
+            renderList(); renderSettings(); /* renderSettings clears #import-status, so set it after */
+            status.textContent = `Attached ${attached} photo${attached === 1 ? "" : "s"}.`
+              + (orphaned ? ` ${orphaned} had no matching entry — import the journal file first.` : "");
+            status.classList.add(orphaned ? "is-err" : "is-ok");
+            toast(attached ? "Photos attached." : "No matching entries — import the journal file first.", { err: !attached });
+            e.target.value = "";
+            return;
+          }
+
           const incoming = Array.isArray(data) ? data : data.entries;
           if (!Array.isArray(incoming)) throw new Error("No 'entries' array.");
           const cleaned = incoming.filter(x => x && typeof x === "object" && (x.name || x.company))
@@ -1879,7 +1940,13 @@
           if (merge) {
             const existing = store.all();
             const byId = new Map(existing.map(en => [en.id, en]));
-            cleaned.forEach(en => byId.set(en.id, en));
+            /* Core exports carry no photos — keep the picture already on
+               this device when the incoming copy of an entry lacks one. */
+            cleaned.forEach(en => {
+              const prev = byId.get(en.id);
+              if (!en.photo && prev && prev.photo) en.photo = prev.photo;
+              byId.set(en.id, en);
+            });
             result = Array.from(byId.values());
           } else {
             if (!confirm("Replace all current entries?")) { status.textContent = "Cancelled."; e.target.value = ""; return; }
@@ -1891,9 +1958,14 @@
           if (typeof data.notebook === "string") {
             if (!merge || !notebookStore.load()) notebookStore.save(data.notebook);
           }
-          status.textContent = `Imported ${cleaned.length}. Archive holds ${result.length}.`;
+          /* Entries from a core export flag hasPhoto — count the ones still
+             waiting for their picture so we can point at the photos file. */
+          const awaiting = result.filter(en => !en.photo &&
+            incoming.some(x => x && x.id === en.id && x.hasPhoto)).length;
+          status.textContent = `Imported ${cleaned.length}. Archive holds ${result.length}.`
+            + (awaiting ? ` ${awaiting} entr${awaiting === 1 ? "y awaits" : "ies await"} photos — import the photos file next.` : "");
           status.classList.add("is-ok");
-          toast("Import complete.");
+          toast(awaiting ? "Import complete — now pick the photos file." : "Import complete.", { ms: awaiting ? 4200 : undefined });
           e.target.value = "";
         } catch (err) {
           console.error(err);
