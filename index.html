@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 
   <!-- ============ PWA / iOS meta ============ -->
-  <meta name="app-version" content="1.2.0" />
+  <meta name="app-version" content="1.3.0" />
   <meta name="theme-color" content="#F9F8F6" />
   <meta name="color-scheme" content="light" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -266,7 +266,6 @@
       padding: 0.75rem 0 1.25rem;
       border-bottom: 1px solid var(--rule);
     }
-    .hero__eyebrow { margin-bottom: 0.625rem; }
     .hero__title {
       font-size: clamp(1rem, 4.5vw, 1.375rem);
       line-height: 0.95;
@@ -353,9 +352,9 @@
     }
     .toolbar__search { width: 100%; }
     .toolbar__row {
-      display: flex; gap: 0.5rem; margin-top: 0.75rem;
+      display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem;
     }
-    .toolbar__row .select { flex: 1; min-width: 0; }
+    .toolbar__row .select { flex: 1 1 8rem; min-width: 0; }
     .toolbar__row .btn { flex-shrink: 0; padding: 0 0.875rem; }
 
     .select {
@@ -568,7 +567,6 @@
       gap: 0.5rem;
     }
     .entry-card__company { font-size: 9px; letter-spacing: 0.18em; }
-    .entry-card__date    { font-size: 9px; letter-spacing: 0.18em; }
     .entry-card__name {
       font-family: var(--font-serif);
       font-size: 1.375rem;
@@ -832,7 +830,7 @@
       <nav class="masthead__nav" aria-label="Primary">
         <button class="linkbtn" data-nav="list">Index</button>
         <button class="linkbtn" data-nav="form">New</button>
-        <button class="linkbtn" data-nav="settings">Archive</button>
+        <button class="linkbtn" data-nav="settings">Settings</button>
       </nav>
     </div>
   </header>
@@ -842,7 +840,6 @@
     <!-- ============ LIST VIEW ============ -->
     <section class="view" data-view="list" hidden>
       <div class="hero">
-        <p class="overline hero__eyebrow">An editorial archive</p>
         <h1 class="hero__title">Every <em>bowl</em>,<br/>considered.</h1>
         <div class="hero__meta">
           <span class="overline">Entries <span id="entry-count">0</span></span>
@@ -857,6 +854,9 @@
           <input id="search" type="search" placeholder="Search company, name, region&hellip;" autocomplete="off" />
         </label>
         <div class="toolbar__row">
+          <select id="filter-company" class="select" aria-label="Filter by company">
+            <option value="">All companies</option>
+          </select>
           <select id="filter-grade" class="select" aria-label="Filter by grade">
             <option value="">All grades</option>
             <option value="ceremonial">Ceremonial</option>
@@ -883,7 +883,6 @@
           <div class="entry-card__body">
             <div class="entry-card__top">
               <span class="overline entry-card__company"></span>
-              <span class="overline entry-card__date"></span>
             </div>
             <h2 class="entry-card__name"></h2>
             <div class="entry-card__meta">
@@ -1007,7 +1006,7 @@
       <button class="backlink linkbtn" data-nav="list">&larr; Back to Index</button>
 
       <header class="page-head">
-        <p class="overline">Archive</p>
+        <p class="overline">Settings</p>
         <h1 class="page-head__title"><em>House</em>keeping.</h1>
         <p class="page-head__lede">Move the journal between iPhones. Keep the app current.</p>
       </header>
@@ -1120,7 +1119,7 @@
   (() => {
     "use strict";
 
-    const APP_VERSION = "1.2.0";    /* MUST match <meta name="app-version"> above */
+    const APP_VERSION = "1.3.0";    /* MUST match <meta name="app-version"> above */
     const STORAGE_KEY = "matcha:journal:v1";
     const VIEWS = ["list", "detail", "form", "settings", "notebook"];
     const GRADES = { ceremonial: "Ceremonial", premium: "Premium", culinary: "Culinary" };
@@ -1179,16 +1178,6 @@
     const uid = () => (crypto.randomUUID ? crypto.randomUUID() :
       "id-" + Math.random().toString(36).slice(2) + "-" + Date.now().toString(36));
 
-    const fmtDate = (iso) => {
-      if (!iso) return "";
-      const d = new Date(iso);
-      return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    };
-    const fmtDateLong = (iso) => {
-      if (!iso) return "";
-      const d = new Date(iso);
-      return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-    };
     const romanize = (n) => {
       const map = [["M",1000],["CM",900],["D",500],["CD",400],["C",100],["XC",90],["L",50],["XL",40],["X",10],["IX",9],["V",5],["IV",4],["I",1]];
       let out = ""; for (const [s, v] of map) { while (n >= v) { out += s; n -= v; } }
@@ -1382,15 +1371,31 @@
     });
 
     /* ---------- Renderers ---------- */
-    const filters = { q: "", grade: "", sort: "date-desc" };
+    const filters = { q: "", company: "", grade: "", sort: "date-desc" };
+
+    /* Rebuild the company list from the entries themselves, keeping the
+       current pick selected when that company still exists. */
+    function syncCompanyFilter(entries) {
+      const select = qs("#filter-company");
+      if (!select) return;
+      const names = [...new Set(entries.map(e => (e.company || "").trim()).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b));
+      if (filters.company && !names.includes(filters.company)) filters.company = "";
+      select.innerHTML = `<option value="">All companies</option>` +
+        names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+      select.value = filters.company;
+    }
 
     function renderList() {
       const entries = store.all();
       const countEl = qs("#entry-count"); if (countEl) countEl.textContent = String(entries.length).padStart(2, "0");
       const volEl = qs("#vol-count"); if (volEl) volEl.textContent = romanize(Math.max(1, Math.ceil(entries.length / 12)));
 
+      syncCompanyFilter(entries);
+
       const q = filters.q.trim().toLowerCase();
       let filtered = entries.filter(e => {
+        if (filters.company && (e.company || "").trim() !== filters.company) return false;
         if (filters.grade && e.grade !== filters.grade) return false;
         if (!q) return true;
         return [e.company, e.name, e.region, e.tastingNotes, e.notes].some(
@@ -1426,7 +1431,6 @@
         const node = tmpl.content.firstElementChild.cloneNode(true);
         node.dataset.id = e.id;
         qs(".entry-card__company", node).textContent = e.company || "—";
-        qs(".entry-card__date", node).textContent = fmtDate(e.createdAt);
         qs(".entry-card__name", node).textContent = e.name || "Untitled";
         qs(".entry-card__region", node).textContent = e.region || "Region unknown";
         qs(".entry-card__grade", node).textContent = GRADES[e.grade] || "—";
@@ -1455,7 +1459,7 @@
       const tasting = (e.tastingNotes || "").split(",").map(s => s.trim()).filter(Boolean);
 
       root.innerHTML = `
-        <p class="overline detail__eyebrow">${escapeHtml(GRADES[e.grade] || "—")} &middot; ${escapeHtml(fmtDateLong(e.createdAt))}</p>
+        <p class="overline detail__eyebrow">${escapeHtml(GRADES[e.grade] || "—")}</p>
         <h1 class="detail__name">${escapeHtml(e.name || "Untitled")}</h1>
         <p class="detail__company"><em>${escapeHtml(e.company || "—")}</em>${e.region ? ` &middot; ${escapeHtml(e.region)}` : ""}</p>
 
@@ -1465,7 +1469,6 @@
           <div><span class="overline spec__label">Rating</span><div class="spec__value">${renderRatingDisplay(e.rating)}</div></div>
           <div><span class="overline spec__label">Grade</span><span class="spec__value"><em>${escapeHtml(GRADES[e.grade] || "—")}</em></span></div>
           <div><span class="overline spec__label">Region</span><span class="spec__value">${escapeHtml(e.region || "—")}</span></div>
-          <div><span class="overline spec__label">Recorded</span><span class="spec__value tabular">${escapeHtml(fmtDate(e.createdAt))}</span></div>
         </div>
 
         ${tasting.length ? `
@@ -1632,6 +1635,7 @@
     /* ---------- Toolbar ---------- */
     function setupToolbar() {
       qs("#search").addEventListener("input", (e) => { filters.q = e.target.value; renderList(); });
+      qs("#filter-company").addEventListener("change", (e) => { filters.company = e.target.value; renderList(); });
       qs("#filter-grade").addEventListener("change", (e) => { filters.grade = e.target.value; renderList(); });
       qs("#sort-by").addEventListener("change", (e) => { filters.sort = e.target.value; renderList(); });
     }
