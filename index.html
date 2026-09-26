@@ -858,6 +858,54 @@
       .detail__specs { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
       .toolbar__row { gap: 0.75rem; }
     }
+  
+    /* ---------- Compact, cleaner reading rhythm ---------- */
+    .view { padding: 0.75rem 1rem 3rem; }
+    .masthead__row { padding: 0.5rem 1rem; }
+    .hero { padding: 0.5rem 0 0.9rem; }
+    .hero__meta { margin-top: 0.4rem; }
+    .page-head { padding: 0.35rem 0 0.9rem; margin-bottom: 1rem; }
+    .page-head__title { margin-top: 0.25rem; }
+    .toolbar { padding: 0.7rem 0; }
+    .entry-card {
+      padding: 0.7rem 0;
+      gap: 0.7rem;
+      align-items: flex-start;
+    }
+    .entry-card__media img { width: 64px; height: 64px; }
+    .entry-card__top { margin-bottom: 2px; }
+    .entry-card__company { font-size: 8px; letter-spacing: 0.14em; }
+    .entry-card__name {
+      font-size: 1.125rem;
+      line-height: 1.12;
+      margin: 0 0 3px;
+    }
+    .entry-card__meta { font-size: 10px; gap: 4px; margin-bottom: 3px; }
+    .entry-card__grade { font-size: 8px; }
+    .entry-card__rating .rating { --whisk-size: 12px; gap: 1px; }
+    .entry-card__rating .rating__num { font-size: 0.75rem; margin-left: 3px; }
+    .entry-card__notes { font-size: 12px; line-height: 1.4; }
+    .empty { padding: 1.75rem 0 1.25rem; }
+    .detail { padding-top: 0.25rem; }
+    .detail__eyebrow { margin-bottom: 0.5rem; }
+    .detail__name { margin: 0.35rem 0; }
+    .detail__company { margin-bottom: 0.9rem; }
+    .detail__photo, .detail__photo img { margin-bottom: 0.9rem; }
+    .detail__specs { gap: 0.75rem 1rem; padding: 0.85rem 0; margin-bottom: 1rem; }
+    .detail__section { padding: 0.85rem 0; }
+    .detail__actions { margin-top: 1rem; padding-top: 0.85rem; }
+    .stack > * + * { margin-top: 1rem; }
+    .panel { padding-top: 1rem; }
+    .panel__head { margin-bottom: 0.55rem; }
+    .panel__title { font-size: 1.125rem; line-height: 1.15; }
+    .panel__body { font-size: 13px; line-height: 1.45; margin-bottom: 0.7rem; }
+    .colophon { padding-top: 1.5rem; margin-top: 1.5rem; }
+
+    @media (min-width: 600px) {
+      .view { padding: 1.5rem 2rem 4rem; }
+      .entry-card__name { font-size: 1.35rem; }
+    }
+
   </style>
 </head>
 <body>
