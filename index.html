@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 
   <!-- ============ PWA / iOS meta ============ -->
-  <meta name="app-version" content="1.4.0" />
+  <meta name="app-version" content="1.5.0" />
   <meta name="theme-color" content="#F9F8F6" />
   <meta name="color-scheme" content="light" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -907,6 +907,10 @@
     }
 
   </style>
+<link rel="stylesheet" href="assistant-inbox.css?v=1">
+<script src="assistant-inbox-core.js?v=1"></script>
+<script src="assistant-inbox.js?v=1"></script>
+<script>window.JournalInbox = AssistantInboxCore("matcha");</script>
 </head>
 <body>
 
@@ -1125,6 +1129,7 @@
       </header>
 
       <div class="stack">
+        <div id="assistant-entries"></div>
 
         <section class="panel">
           <div class="panel__head">
@@ -1232,7 +1237,7 @@
   (() => {
     "use strict";
 
-    const APP_VERSION = "1.4.0";    /* MUST match <meta name="app-version"> above */
+    const APP_VERSION = "1.5.0";    /* MUST match <meta name="app-version"> above */
     const STORAGE_KEY = "matcha:journal:v1";
     const VIEWS = ["list", "detail", "form", "settings", "notebook"];
     const GRADES = { ceremonial: "Ceremonial", premium: "Premium", culinary: "Culinary" };
@@ -1256,11 +1261,11 @@
     /* ---------- Storage ---------- */
     const store = {
       load() {
-        try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : []; }
+        try { return JournalInbox.readCollection(localStorage).data; }
         catch (e) { console.error(e); return []; }
       },
-      save(entries) {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); return true; }
+      save(entries, receipts = []) {
+        try { JournalInbox.saveData(localStorage, entries, receipts); return true; }
         catch (err) {
           console.error(err);
           toast("Storage is full — could not save. Try a smaller photo or export & prune.", { err: true, ms: 4200 });
@@ -1276,7 +1281,7 @@
         return this.save(all);
       },
       remove(id) { this.save(this.load().filter(e => e.id !== id)); },
-      wipe() { localStorage.removeItem(STORAGE_KEY); },
+      wipe() { this.save([]); },
     };
 
     /* ---------- Notebook store (free-form aside) ---------- */
@@ -2002,6 +2007,7 @@
           exportedAt: new Date().toISOString(),
           entries,
           notebook: notebookStore.load(),
+          assistantReceipts: JournalInbox.readCollection(localStorage).receipts,
         });
         try { localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString()); } catch (err) { /* non-fatal */ }
         const withPhotos = entries.filter(e => e.hasPhoto).length;
@@ -2104,7 +2110,7 @@
             if (!confirm("Replace all current entries?")) { status.textContent = "Cancelled."; e.target.value = ""; return; }
             result = cleaned;
           }
-          store.save(result);
+          if (!store.save(result, data.assistantReceipts || [])) throw new Error("Could not save import");
           // Restore notebook if the file carries one. In merge mode, only overwrite when the
           // current notebook is empty (don't clobber recent typing); in replace mode, always.
           if (typeof data.notebook === "string") {
@@ -2258,6 +2264,8 @@
       setupForm();
       setupIO();
       setupUpdates();
+      const inbox = AssistantInbox.create({core:JournalInbox,onSaved:() => { renderList(); renderSettings(); }});
+      inbox.mount(document.getElementById('assistant-entries'));
       registerSW();
       maybeNudgeBackup();
 
@@ -2274,3 +2282,4 @@
   </script>
 </body>
 </html>
+
