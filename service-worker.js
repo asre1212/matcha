@@ -13,7 +13,7 @@
    ========================================================= */
 "use strict";
 
-const SW_VERSION = "1.5.0"; /* keep in step with app-version in index.html */
+const SW_VERSION = "1.5.1"; /* keep in step with app-version in index.html */
 const CACHE_NAME = "matcha-shell-v" + SW_VERSION;
 const FONT_CACHE = "matcha-fonts-v1";
 
@@ -39,7 +39,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => k !== CACHE_NAME && k !== FONT_CACHE)
+          .filter((k) => k.startsWith("matcha-") && k !== CACHE_NAME && k !== FONT_CACHE)
           .map((k) => caches.delete(k))
       )
     ).then(() => self.clients.claim())
